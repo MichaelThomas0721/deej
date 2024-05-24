@@ -11,13 +11,10 @@ import (
 	"time"
 
 	"github.com/jacobsa/go-serial/serial"
+	"github.com/thoas/go-funk"
 	"go.uber.org/zap"
 
 	"github.com/omriharel/deej/pkg/deej/util"
-
-	"syscall"
-	"unicode/utf16"
-	"unsafe"
 )
 
 // SerialIO provides a deej-aware abstraction layer to managing serial I/O
@@ -34,9 +31,9 @@ type SerialIO struct {
 	conn        io.ReadWriteCloser
 
 	lastKnownNumSliders        int
-	lastKnownNumButtons		   int
+	lastKnownNumButtons        int
 	currentSliderPercentValues []float32
-	currentButtonStates  	   []int
+	currentButtonStates        []int
 
 	sliderMoveConsumers []chan SliderMoveEvent
 }
@@ -243,7 +240,6 @@ func (sio *SerialIO) handleLine(logger *zap.SugaredLogger, line string) {
 		logger.Debugw("Received unexpected line from serial, ignoring", "line", line)
 		return
 	}
-	
 
 	// trim the suffix
 	line = strings.TrimSuffix(line, "\r\n")
@@ -347,59 +343,28 @@ func (sio *SerialIO) handleLine(logger *zap.SugaredLogger, line string) {
 
 		// check if state changed
 		if sio.currentButtonStates[buttonIdx] != number {
-			
+
 			// update the saved value
 			sio.currentButtonStates[buttonIdx] = number
 
 			// if new state is 0 (button pressed), run press action
 			if number == 0 {
 				// get the current active window
-				// title := robotgo.GetActive();
-				// sio.logger.Debugw("TITLE:", title);
-				sio.logger.Debugw("TITLE:asdfasdfasdfasdfasdfasdf");
-				
-				hwnd := GetForegroundWindow()
-				if hwnd == 0 {
-					fmt.Println("No active window found")
-					return
+
+				currentWindowProcessNames, err := util.GetCurrentWindowProcessNames()
+
+				// we could have gotten a non-lowercase names from that, so let's ensure we return ones that are lowercase
+				for targetIdx, target := range currentWindowProcessNames {
+					currentWindowProcessNames[targetIdx] = strings.ToLower(target)
 				}
-			
-				title := GetWindowText(hwnd)
-				fmt.Printf("Active window title: %s\n", title)
+
+				// remove dupes
+				currentWindowProcessName = funk.UniqString(currentWindowProcessNames)
+				util.addWindowToSlider(currentWindowProcessName, buttonIdx)
+
+				fmt.Printf("Active window title: %s\n", currentWindowProcessNames)
 			}
 		}
 
 	}
-}
-
-var (
-    user32                 = syscall.MustLoadDLL("user32.dll")
-    procGetForegroundWindow = user32.MustFindProc("GetForegroundWindow")
-    procGetWindowTextW      = user32.MustFindProc("GetWindowTextW")
-)
-
-func GetForegroundWindow() uintptr {
-    hwnd, _, _ := procGetForegroundWindow.Call()
-    return hwnd
-}
-
-func GetWindowText(hwnd uintptr) string {
-    buf := make([]uint16, 256)
-    _, _, _ = procGetWindowTextW.Call(
-        hwnd,
-        uintptr(unsafe.Pointer(&buf[0])),
-        uintptr(len(buf)),
-    )
-
-    return utf16ToString(buf)
-}
-
-func utf16ToString(s []uint16) string {
-    for i, v := range s {
-        if v == 0 {
-            s = s[:i]
-            break
-        }
-    }
-    return string(utf16.Decode(s))
 }
