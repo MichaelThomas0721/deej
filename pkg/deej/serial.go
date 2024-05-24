@@ -14,6 +14,10 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/omriharel/deej/pkg/deej/util"
+
+	"syscall"
+	"unicode/utf16"
+	"unsafe"
 )
 
 // SerialIO provides a deej-aware abstraction layer to managing serial I/O
@@ -30,7 +34,9 @@ type SerialIO struct {
 	conn        io.ReadWriteCloser
 
 	lastKnownNumSliders        int
+	lastKnownNumButtons		   int
 	currentSliderPercentValues []float32
+	currentButtonStates  	   []int
 
 	sliderMoveConsumers []chan SliderMoveEvent
 }
@@ -41,7 +47,7 @@ type SliderMoveEvent struct {
 	PercentValue float32
 }
 
-var expectedLinePattern = regexp.MustCompile(`^\d{1,4}(\|\d{1,4})*\r\n$`)
+var expectedLinePattern = regexp.MustCompile(`^\d{1,4}((\|\|?)\d{1,4})*\r\n$`)
 
 // NewSerialIO creates a SerialIO instance that uses the provided deej
 // instance's connection info to establish communications with the arduino chip
@@ -119,6 +125,7 @@ func (sio *SerialIO) Start() error {
 			case <-sio.stopChannel:
 				sio.close(namedLogger)
 			case line := <-lineChannel:
+				namedLogger.Infow("Received line", "line", line)
 				sio.handleLine(namedLogger, line)
 			}
 		}
@@ -164,6 +171,7 @@ func (sio *SerialIO) setupOnConfigReload() {
 				go func() {
 					<-time.After(stopDelay)
 					sio.lastKnownNumSliders = 0
+					sio.lastKnownNumButtons = 0
 				}()
 
 				// if connection params have changed, attempt to stop and start the connection
@@ -232,14 +240,19 @@ func (sio *SerialIO) handleLine(logger *zap.SugaredLogger, line string) {
 	// but most lines will end with CRLF. it may also have garbage instead of
 	// deej-formatted values, so we must check for that! just ignore bad ones
 	if !expectedLinePattern.MatchString(line) {
+		logger.Debugw("Received unexpected line from serial, ignoring", "line", line)
 		return
 	}
+	
 
 	// trim the suffix
 	line = strings.TrimSuffix(line, "\r\n")
 
+	// split on double pipe (||), this separates the sliders and the buttons
+	splittedValues := strings.Split(line, "||")
+
 	// split on pipe (|), this gives a slice of numerical strings between "0" and "1023"
-	splitLine := strings.Split(line, "|")
+	splitLine := strings.Split(splittedValues[0], "|")
 	numSliders := len(splitLine)
 
 	// update our slider count, if needed - this will send slider move events for all
@@ -304,4 +317,89 @@ func (sio *SerialIO) handleLine(logger *zap.SugaredLogger, line string) {
 			}
 		}
 	}
+
+	// Split the button values
+	splitLineButtons := strings.Split(splittedValues[1], "|")
+	numButtons := len(splitLine)
+
+	if numButtons != sio.lastKnownNumButtons {
+		logger.Infow("Detected buttons", "amount", numButtons)
+		sio.lastKnownNumButtons = numButtons
+		sio.currentButtonStates = make([]int, numButtons)
+
+		// reset everything to be an impossible value to force the slider move event later
+		for idx := range sio.currentButtonStates {
+			sio.currentButtonStates[idx] = -1.0
+		}
+	}
+
+	// for each button
+	for buttonIdx, stringValue := range splitLineButtons {
+
+		// Convert the button state string into an integer
+		number, _ := strconv.Atoi(stringValue)
+
+		// check if the state is possible (0 or 1)
+		if number != 0 && number != 1 {
+			sio.logger.Debugw("Got malformed line from serial for button, ignoring", "line", line, ", number", number)
+			return
+		}
+
+		// check if state changed
+		if sio.currentButtonStates[buttonIdx] != number {
+			
+			// update the saved value
+			sio.currentButtonStates[buttonIdx] = number
+
+			// if new state is 0 (button pressed), run press action
+			if number == 0 {
+				// get the current active window
+				// title := robotgo.GetActive();
+				// sio.logger.Debugw("TITLE:", title);
+				sio.logger.Debugw("TITLE:asdfasdfasdfasdfasdfasdf");
+				
+				hwnd := GetForegroundWindow()
+				if hwnd == 0 {
+					fmt.Println("No active window found")
+					return
+				}
+			
+				title := GetWindowText(hwnd)
+				fmt.Printf("Active window title: %s\n", title)
+			}
+		}
+
+	}
+}
+
+var (
+    user32                 = syscall.MustLoadDLL("user32.dll")
+    procGetForegroundWindow = user32.MustFindProc("GetForegroundWindow")
+    procGetWindowTextW      = user32.MustFindProc("GetWindowTextW")
+)
+
+func GetForegroundWindow() uintptr {
+    hwnd, _, _ := procGetForegroundWindow.Call()
+    return hwnd
+}
+
+func GetWindowText(hwnd uintptr) string {
+    buf := make([]uint16, 256)
+    _, _, _ = procGetWindowTextW.Call(
+        hwnd,
+        uintptr(unsafe.Pointer(&buf[0])),
+        uintptr(len(buf)),
+    )
+
+    return utf16ToString(buf)
+}
+
+func utf16ToString(s []uint16) string {
+    for i, v := range s {
+        if v == 0 {
+            s = s[:i]
+            break
+        }
+    }
+    return string(utf16.Decode(s))
 }
