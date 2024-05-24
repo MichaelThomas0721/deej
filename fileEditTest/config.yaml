@@ -1,0 +1,8 @@
+baud_rate: 9600
+com_port: COM3
+invert_sliders: false
+noise_reduction: default
+slider_mapping:
+  0: master
+  5:
+  - spotify.exe
