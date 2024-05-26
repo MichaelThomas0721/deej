@@ -2,14 +2,18 @@ package util
 
 import (
 	"fmt"
+	"io/ioutil"
+	"log"
 	"math"
 	"os"
 	"os/exec"
 	"os/signal"
+	"reflect"
 	"runtime"
 	"syscall"
 
 	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
 )
 
 // EnsureDirExists creates the given directory path if it doesn't already exist
@@ -131,7 +135,7 @@ type Config struct {
 }
 
 // Handles the logic for adding the window to the slider in the config
-func addWindowToSlider(windowTitle string, index int) {
+func AddWindowToSlider(windowTitle string, index int) {
 	// Read the YAML file
 	data, err := ioutil.ReadFile("config.yaml")
 	if err != nil {
@@ -159,6 +163,14 @@ func addWindowToSlider(windowTitle string, index int) {
 		}
 	} else {
 		sliderMapping = make(map[int]interface{})
+	}
+
+	for index, val := range sliderMapping {
+		valArr := makeStringSlice(val)
+		if contains(valArr, windowTitle){
+			valArr = remove(valArr, windowTitle)
+		}
+		sliderMapping[index] = valArr
 	}
 
 	// Check the value type and append windowTitle accordingly
@@ -202,4 +214,40 @@ func addWindowToSlider(windowTitle string, index int) {
 	// Print the modified configuration
 	fmt.Println("Modified configuration:")
 	fmt.Println(string(modifiedData))
+}
+
+func contains(s []string, str string) bool {
+	// Convert s to a slice of strings
+
+	for _, v := range s {
+		if v == str {
+			return true
+		}
+	}
+	return false
+}
+
+func remove(s []string, str string) []string {
+	// Convert s to a slice of strings
+	var newVals []string
+	for _, v := range s {
+		if v != str {
+			newVals = append(newVals, v)
+		}
+	}
+	return newVals
+}
+
+func makeStringSlice(s interface{}) []string {
+	// Convert s to a slice of strings
+	vals, ok := s.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	var newVals []string
+	for _, v := range vals {
+		newVals = append(newVals, fmt.Sprint(v))
+	}
+	return newVals
 }

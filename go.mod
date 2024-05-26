@@ -212,7 +212,7 @@ require (
 	gopkg.in/errgo.v2 v2.1.0 // indirect
 	gopkg.in/ini.v1 v1.51.0 // indirect
 	gopkg.in/resty.v1 v1.12.0 // indirect
-	gopkg.in/yaml.v2 v2.2.4 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	honnef.co/go/tools v0.0.1-2019.2.3 // indirect
 	rsc.io/binaryregexp v0.2.0 // indirect

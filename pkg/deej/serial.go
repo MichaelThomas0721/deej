@@ -350,17 +350,21 @@ func (sio *SerialIO) handleLine(logger *zap.SugaredLogger, line string) {
 			// if new state is 0 (button pressed), run press action
 			if number == 0 {
 				// get the current active window
+    
+				currentWindowProcessNames, _ := util.GetCurrentWindowProcessNames()
 
-				currentWindowProcessNames, err := util.GetCurrentWindowProcessNames()
-
-				// we could have gotten a non-lowercase names from that, so let's ensure we return ones that are lowercase
+				// we could have gotten non-lowercase names from that, so let's ensure we return ones that are lowercase
 				for targetIdx, target := range currentWindowProcessNames {
 					currentWindowProcessNames[targetIdx] = strings.ToLower(target)
 				}
 
 				// remove dupes
-				currentWindowProcessName = funk.UniqString(currentWindowProcessNames)
-				util.addWindowToSlider(currentWindowProcessName, buttonIdx)
+				currentWindowProcessNames = funk.UniqString(currentWindowProcessNames)
+
+				// join the names into a single string
+				currentWindowProcessName := strings.Join(currentWindowProcessNames, ", ")
+
+				util.AddWindowToSlider(currentWindowProcessName, buttonIdx)
 
 				fmt.Printf("Active window title: %s\n", currentWindowProcessNames)
 			}
