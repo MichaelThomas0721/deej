@@ -1,5 +1,5 @@
 baud_rate: 9600
-com_port: COM3
+com_port: /dev/ttyACM0
 invert_sliders: false
 noise_reduction: default
 slider_mapping:
